@@ -1,11 +1,14 @@
-import express, { Request, Response } from "express";
+import express from "express";
+import usersRouter from "./routes/user";
+import authRouter from "./routes/auth";
 
 const app = express();
-const PORT = process.env.PORT || 4000;
 
-app.get("/api/users/", (request: Request, response: Response) => {
-  response.send("Hello, World!");
-});
+app.use(express.json());
+
+app.use("/api/users", usersRouter);
+app.use("/api/auth", authRouter);
+const PORT = 5000;
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);

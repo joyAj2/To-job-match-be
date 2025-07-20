@@ -1,0 +1,385 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// This is your Prisma schema file for a job matching website
+// Students submit their stack/resume and get matched with scraped jobs
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Core user model - represents students and other users
+model User {
+  id          String   @id @default(uuid()) // Unique identifier for each user
+  email       String   @unique              // Email address (must be unique)
+  username    String?  @unique              // Optional username for profile
+  firstName   String                        // User's first name
+  lastName    String                        // User's last name
+  password    String                        // Hashed password
+  role        UserRole @default(STUDENT)    // User role (STUDENT, ADMIN, EMPLOYER)
+  
+  // Profile information
+  bio         String?                       // Short bio/description
+  location    String?                       // Current location
+  phone       String?                       // Phone number
+  website     String?                       // Personal website URL
+  linkedIn    String?                       // LinkedIn profile URL
+  github      String?                       // GitHub profile URL
+  portfolio   String?                       // Portfolio website URL
+  
+  // Experience and education
+  experience  String?                       // Years of experience or description
+  education   String?                       // Educational background
+  
+  // Profile completion and verification
+  isVerified  Boolean  @default(false)      // Email verification status
+  isActive    Boolean  @default(true)       // Account active status
+  
+  // Timestamps
+  createdAt   DateTime @default(now())      // Account creation date
+  updatedAt   DateTime @updatedAt           // Last profile update
+  lastLogin   DateTime?                     // Last login timestamp
+  
+  // Related models
+  profile     UserProfile?                  // Extended profile information
+  skills      UserSkill[]                   // User's technical skills
+  resumes     Resume[]                      // User's uploaded resumes
+  applications JobApplication[]             // Job applications submitted
+  savedJobs   SavedJob[]                    // Jobs saved by user
+  preferences JobPreference?                // Job search preferences
+  
+  @@map("users") // Database table name
+  JobMatch JobMatch[]
+}
+
+// Extended user profile with additional details
+model UserProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique           // One-to-one relationship with User
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Professional information
+  currentJobTitle   String?                   // Current job title
+  currentCompany    String?                   // Current company
+  desiredJobTitle   String?                   // Desired job title
+  desiredSalary     Int?                      // Desired salary (in cents)
+  availableFrom     DateTime?                 // Available start date
+  
+  // Additional details
+  summary           String?                   // Professional summary
+  achievements      String[]                  // List of achievements
+  certifications    String[]                  // Professional certifications
+  languages         String[]                  // Languages spoken
+  
+  // Preferences
+  workType          WorkType[]                // Remote, onsite, hybrid
+  jobType           JobType[]                 // Full-time, part-time, contract
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("user_profiles")
+}
+
+// User's technical skills and proficiency levels
+model UserSkill {
+  id           String      @id @default(uuid())
+  userId       String                          // Foreign key to User
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  skillName    String                          // Name of the skill (e.g., "JavaScript", "React")
+  category     SkillCategory                   // Category of skill (PROGRAMMING, FRAMEWORK, etc.)
+  proficiency  ProficiencyLevel                // Beginner, Intermediate, Advanced, Expert
+  yearsOfExp   Int?                            // Years of experience with this skill
+  
+  // Verification and endorsements
+  isVerified   Boolean     @default(false)     // Skill verified through tests/projects
+  endorsements Int         @default(0)         // Number of endorsements
+  
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  
+  @@unique([userId, skillName]) // Prevent duplicate skills per user
+  @@map("user_skills")
+}
+
+// Resume storage and management
+model Resume {
+  id           String   @id @default(uuid())
+  userId       String                          // Foreign key to User
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title        String                          // Resume title/name
+  fileName     String                          // Original file name
+  fileUrl      String                          // URL to stored file (S3, etc.)
+  fileSize     Int                             // File size in bytes
+  mimeType     String                          // File type (application/pdf, etc.)
+  
+  // Parsed content for searching
+  parsedText   String?                         // Extracted text content
+  skills       String[]                        // Extracted skills from resume
+  experience   String[]                        // Extracted experience
+  education    String[]                        // Extracted education
+  
+  // Status and metadata
+  isDefault    Boolean  @default(false)        // Primary resume for applications
+  isActive     Boolean  @default(true)         // Active/inactive status
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@map("resumes")
+}
+
+// Job postings scraped from various sources
+model Job {
+  id              String   @id @default(uuid())
+  
+  // Basic job information
+  title           String                        // Job title
+  company         String                        // Company name
+  companyLogo     String?                       // Company logo URL
+  description     String                        // Job description
+  requirements    String[]                      // Job requirements
+  responsibilities String[]                     // Job responsibilities
+  
+  // Job details
+  location        String?                       // Job location
+  workType        WorkType                      // Remote, onsite, hybrid
+  jobType         JobType                       // Full-time, part-time, contract
+  experienceLevel ExperienceLevel               // Entry, Mid, Senior, Executive
+  
+  // Compensation
+  salaryMin       Int?                          // Minimum salary (in cents)
+  salaryMax       Int?                          // Maximum salary (in cents)
+  currency        String    @default("USD")     // Salary currency
+  
+  // Skills and technologies
+  requiredSkills  String[]                      // Required technical skills
+  preferredSkills String[]                      // Preferred/nice-to-have skills
+  
+  // Source information
+  sourceUrl       String                        // Original job posting URL
+  sourceWebsite   String                        // Website where job was found
+  externalId      String?                       // External job ID from source
+  
+  // Status and metadata
+  isActive        Boolean   @default(true)      // Job still available
+  isRemote        Boolean   @default(false)     // Remote work available
+  applicationUrl  String?                       // Direct application URL
+  
+  // Dates
+  postedAt        DateTime?                     // When job was originally posted
+  expiresAt       DateTime?                     // When job posting expires
+  createdAt       DateTime  @default(now())    // When scraped/added to our system
+  updatedAt       DateTime  @updatedAt
+  
+  // Related models
+  applications    JobApplication[]              // Applications for this job
+  savedBy         SavedJob[]                    // Users who saved this job
+  matches         JobMatch[]                    // User matches for this job
+  
+  @@unique([sourceUrl, externalId]) // Prevent duplicate jobs from same source
+  @@index([createdAt])              // Index for recent jobs
+  @@index([location])               // Index for location-based searches
+  @@index([requiredSkills])         // Index for skill-based searches
+  @@map("jobs")
+}
+
+// Job applications submitted by users
+model JobApplication {
+  id              String            @id @default(uuid())
+  userId          String                                // Foreign key to User
+  jobId           String                                // Foreign key to Job
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job             Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  // Application details
+  coverLetter     String?                               // Optional cover letter
+  resumeUrl       String?                               // URL to resume used for application
+  customMessage   String?                               // Custom message to employer
+  
+  // Application status tracking
+  status          ApplicationStatus @default(PENDING)  // Application status
+  appliedAt       DateTime          @default(now())    // When application was submitted
+  
+  // Tracking information
+  isViewed        Boolean           @default(false)    // Has employer viewed application
+  viewedAt        DateTime?                             // When employer viewed application
+  
+  // Response tracking
+  responseDate    DateTime?                             // When employer responded
+  responseMessage String?                               // Employer's response message
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@unique([userId, jobId]) // Prevent duplicate applications
+  @@map("job_applications")
+}
+
+// Jobs saved by users for later application
+model SavedJob {
+  id        String   @id @default(uuid())
+  userId    String                           // Foreign key to User
+  jobId     String                           // Foreign key to Job
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  // Metadata
+  notes     String?                          // User's notes about the job
+  savedAt   DateTime @default(now())         // When job was saved
+  
+  @@unique([userId, jobId]) // Prevent duplicate saves
+  @@map("saved_jobs")
+}
+
+// AI/Algorithm-based job matches for users
+model JobMatch {
+  id            String     @id @default(uuid())
+  userId        String                        // Foreign key to User
+  jobId         String                        // Foreign key to Job
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job           Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  // Match scoring
+  matchScore    Float                         // Match percentage (0.0 to 1.0)
+  skillMatch    Float                         // Skills compatibility score
+  locationMatch Float                         // Location compatibility score
+  salaryMatch   Float                         // Salary compatibility score
+  
+  // Match reasons
+  matchReasons  String[]                      // Why this job matches (skills, location, etc.)
+  missingSkills String[]                      // Skills user lacks for this job
+  
+  // User interaction
+  isViewed      Boolean    @default(false)    // Has user viewed this match
+  isDismissed   Boolean    @default(false)    // Has user dismissed this match
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  @@unique([userId, jobId]) // One match per user-job pair
+  @@index([matchScore])     // Index for sorting by match score
+  @@map("job_matches")
+}
+
+// User's job search preferences
+model JobPreference {
+  id                String        @id @default(uuid())
+  userId            String        @unique              // One-to-one relationship with User
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Location preferences
+  preferredLocations String[]                          // Preferred job locations
+  maxCommute        Int?                               // Max commute time in minutes
+  openToRelocation  Boolean       @default(false)     // Willing to relocate
+  
+  // Job preferences
+  preferredJobTypes JobType[]                          // Full-time, part-time, contract
+  preferredWorkTypes WorkType[]                        // Remote, onsite, hybrid
+  experienceLevels  ExperienceLevel[]                  // Entry, Mid, Senior, Executive
+  
+  // Salary preferences
+  minSalary         Int?                               // Minimum acceptable salary
+  maxSalary         Int?                               // Maximum expected salary
+  currency          String        @default("USD")     // Preferred currency
+  
+  // Industry and role preferences
+  preferredIndustries String[]                         // Preferred industries
+  preferredRoles    String[]                           // Preferred job titles/roles
+  blacklistedCompanies String[]                        // Companies to avoid
+  
+  // Notification preferences
+  emailNotifications Boolean      @default(true)       // Email job alerts
+  frequency         NotificationFrequency @default(DAILY) // How often to send alerts
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  @@map("job_preferences")
+}
+
+
+
+// Enums for type safety and consistency
+
+// User roles in the system
+enum UserRole {
+  STUDENT    // Students looking for jobs
+  EMPLOYER   // Employers posting jobs
+  ADMIN      // System administrators
+  RECRUITER  // External recruiters
+}
+
+// Work arrangement types
+enum WorkType {
+  REMOTE     // Fully remote work
+  ONSITE     // On-site work only
+  HYBRID     // Mix of remote and on-site
+}
+
+// Employment types
+enum JobType {
+  FULL_TIME  // Full-time employment
+  PART_TIME  // Part-time employment
+  CONTRACT   // Contract/freelance work
+  INTERNSHIP // Internship opportunities
+  TEMPORARY  // Temporary employment
+}
+
+// Experience levels
+enum ExperienceLevel {
+  ENTRY      // Entry level (0-2 years)
+  MID        // Mid level (2-5 years)
+  SENIOR     // Senior level (5+ years)
+  EXECUTIVE  // Executive/leadership level
+}
+
+// Skill categories for organization
+enum SkillCategory {
+  PROGRAMMING_LANGUAGE  // JavaScript, Python, Java, etc.
+  FRAMEWORK            // React, Angular, Vue, etc.
+  DATABASE             // MySQL, PostgreSQL, MongoDB, etc.
+  CLOUD                // AWS, Azure, Google Cloud, etc.
+  DEVOPS               // Docker, Kubernetes, CI/CD, etc.
+  DESIGN               // UI/UX, Figma, Photoshop, etc.
+  SOFT_SKILL           // Communication, Leadership, etc.
+  TOOL                 // Git, Jira, Slack, etc.
+  OTHER                // Miscellaneous skills
+}
+
+// Proficiency levels for skills
+enum ProficiencyLevel {
+  BEGINNER     // Learning/basic understanding
+  INTERMEDIATE // Comfortable with fundamentals
+  ADVANCED     // Proficient and experienced
+  EXPERT       // Deep expertise and teaching ability
+}
+
+// Job application status tracking
+enum ApplicationStatus {
+  PENDING      // Application submitted, awaiting review
+  VIEWED       // Employer has viewed application
+  INTERVIEW    // Interview scheduled/in progress
+  OFFER        // Job offer received
+  REJECTED     // Application rejected
+  WITHDRAWN    // User withdrew application
+  EXPIRED      // Application expired
+}
+
+// Notification frequency options
+enum NotificationFrequency {
+  IMMEDIATE    // Real-time notifications
+  DAILY        // Daily digest
+  WEEKLY       // Weekly summary
+  MONTHLY      // Monthly overview
+  DISABLED     // No notifications
+}

@@ -49,3 +49,5 @@ test-output/
 # Misc
 *.tgz
 *.swp
+
+/src/generated/prisma
