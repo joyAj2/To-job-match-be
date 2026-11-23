@@ -91,4 +91,4 @@ This project is licensed under the ISC License. See the [LICENSE](LICENSE) file 
 
 ---
 
-**Note:** This `README.md` assumes your main application entry point is `index.ts` (which compiles to `build/index.js`). If your entry point is different, adjust the `start` and `start:dev` scripts accordingly.**
+**Note:** This `README.md` assumes your main application entry point is `index.ts` (which compiles to `build/index.js`). If your entry point is different, adjust the `start` and `start:dev` scripts accordingly.
